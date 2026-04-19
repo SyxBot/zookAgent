@@ -1,197 +1,179 @@
-const API = "http://localhost:8000";
+// zookAgent Engine v2 — Frontend
+// Uses relative URLs so it works whether served by the Node.js engine or a dev server.
 
-// ── State ──────────────────────────────────────────────────────────────────
-let allTokens = [];
-let es = null;
+const MAX_CARDS    = 100       // max signal cards to keep in DOM
+const STATS_POLL   = 5_000     // ms between stats fetches
 
-// ── SSE ────────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
+let signals   = []             // ordered array of signal objects
+let threshold = 60             // client-side score filter
+let es        = null
+
+// ── SSE Connection ────────────────────────────────────────────────────────────
 function connectSSE() {
-  setStatus("connecting");
-  es = new EventSource(`${API}/api/stream`);
+  setStatus('connecting', 'Connecting…')
+  es = new EventSource('/api/stream')
 
-  es.onopen = () => setStatus("connected");
+  es.onopen = () => setStatus('connected', 'Live')
 
   es.onmessage = (e) => {
-    try {
-      const tokens = JSON.parse(e.data);
-      mergeTokens(tokens);
-      renderTokens(allTokens);
-    } catch (err) {
-      console.warn("SSE parse error:", err);
-    }
-  };
+    let msg
+    try { msg = JSON.parse(e.data) } catch { return }
+
+    if (msg.type === 'signal')   handleSignal(msg.signal)
+    if (msg.type === 'backfill') msg.signals.forEach(handleSignal)
+  }
 
   es.onerror = () => {
-    setStatus("disconnected");
-    es.close();
-    setTimeout(connectSSE, 5000);
-  };
-}
-
-function mergeTokens(incoming) {
-  const map = new Map(allTokens.map(t => [t.mint, t]));
-  incoming.forEach(t => map.set(t.mint, t));
-  allTokens = [...map.values()].sort((a, b) => (b.smart_buy_24h - a.smart_buy_24h) || (b.volume_24h_usd - a.volume_24h_usd));
-}
-
-// ── Filters ────────────────────────────────────────────────────────────────
-function readFilters() {
-  const v = (id) => document.getElementById(id).value;
-  const c = (id) => document.getElementById(id).checked;
-  const num = (id, fallback) => { const n = parseFloat(v(id)); return isNaN(n) ? fallback : n; };
-
-  return {
-    min_liquidity_usd:    num("f-liquidity", 0),
-    min_real_volume_usd:  num("f-volume", 0),
-    min_market_cap_usd:   num("f-mc-min", 0),
-    max_market_cap_usd:   num("f-mc-max", Infinity),
-    max_age_seconds:      num("f-age", 720) * 3600,
-    min_holder_count:     num("f-holders", 0),
-    max_top10_holder_pct: num("f-top10", 100),
-    min_buy_sell_ratio:   num("f-bsr", 0),
-    max_buy_tax:          num("f-buy-tax", 100),
-    max_sell_tax:         num("f-sell-tax", 100),
-    min_smart_buy_24h:    num("f-sm-buy", 0),
-    require_renounced:    c("f-renounced"),
-    require_lp_burned:    c("f-lp-burned"),
-    exclude_honeypots:    c("f-no-honeypot"),
-  };
-}
-
-async function applyFilters() {
-  const criteria = readFilters();
-  try {
-    const resp = await fetch(`${API}/api/filters/apply`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(criteria),
-    });
-    if (!resp.ok) throw new Error(resp.statusText);
-    const tokens = await resp.json();
-    renderTokens(tokens);
-  } catch (err) {
-    console.error("Filter apply failed:", err);
+    setStatus('disconnected', 'Disconnected')
+    es.close()
+    setTimeout(connectSSE, 5_000)
   }
 }
 
-function resetFilters() {
-  document.getElementById("f-liquidity").value = 0;
-  document.getElementById("f-volume").value = 0;
-  document.getElementById("f-mc-min").value = 0;
-  document.getElementById("f-mc-max").value = "";
-  document.getElementById("f-age").value = 720;
-  document.getElementById("f-holders").value = 0;
-  document.getElementById("f-top10").value = 100;
-  document.getElementById("f-bsr").value = 0;
-  document.getElementById("f-buy-tax").value = 10;
-  document.getElementById("f-sell-tax").value = 10;
-  document.getElementById("f-sm-buy").value = 0;
-  document.getElementById("f-renounced").checked = false;
-  document.getElementById("f-lp-burned").checked = false;
-  document.getElementById("f-no-honeypot").checked = true;
-  renderTokens(allTokens);
-}
+// ── Signal handling ───────────────────────────────────────────────────────────
+function handleSignal(signal) {
+  if (signal.score < threshold) return   // client-side threshold filter
 
-// ── Render ─────────────────────────────────────────────────────────────────
-function renderTokens(tokens) {
-  const grid = document.getElementById("token-grid");
-  const empty = document.getElementById("empty-msg");
-  const count = document.getElementById("token-count");
-
-  count.textContent = `${tokens.length} token${tokens.length !== 1 ? "s" : ""}`;
-
-  if (tokens.length === 0) {
-    grid.innerHTML = "";
-    empty.classList.remove("hidden");
-    return;
+  // Deduplicate: update in-place if same token arrives again
+  const idx = signals.findIndex(s => s.token === signal.token)
+  if (idx !== -1) {
+    signals[idx] = signal
+    const existing = document.getElementById(`card-${esc(signal.token)}`)
+    if (existing) { existing.replaceWith(buildCard(signal)); return }
+  } else {
+    signals.unshift(signal)
+    if (signals.length > MAX_CARDS) signals.pop()
   }
-  empty.classList.add("hidden");
-  grid.innerHTML = "";
-  tokens.forEach(t => grid.appendChild(buildCard(t)));
+
+  renderSignals()
 }
 
-function buildCard(t) {
-  const el = document.createElement("div");
-  el.className = "token-card";
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderSignals() {
+  const grid  = document.getElementById('signal-grid')
+  const empty = document.getElementById('empty-msg')
+  const visible = signals.filter(s => s.score >= threshold)
 
-  const ageStr = formatAge(t.age_seconds);
-  const logoSrc = t.logo_uri || "";
+  empty.style.display = visible.length ? 'none' : 'block'
+  grid.innerHTML = ''
+  visible.forEach(s => grid.appendChild(buildCard(s)))
+}
+
+function buildCard(s) {
+  const scoreClass = s.score >= 75 ? 'high' : s.score >= 60 ? 'medium' : 'low'
+  const el = document.createElement('div')
+  el.className = `signal-card score-${scoreClass}`
+  el.id = `card-${esc(s.token)}`
 
   el.innerHTML = `
-    <div class="card-header">
-      ${logoSrc ? `<img src="${escHtml(logoSrc)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : '<div style="width:34px;height:34px;border-radius:50%;background:var(--border);flex-shrink:0"></div>'}
-      <div class="name-block">
-        <div class="symbol">${escHtml(t.symbol)}</div>
-        <div class="name">${escHtml(t.name || t.symbol)}</div>
+    <div class="card-top">
+      <div>
+        <div class="card-symbol">${esc(s.symbol || '???')}</div>
+        <div class="card-name">${esc(s.name || s.token.slice(0, 8) + '…')}</div>
       </div>
-      <div class="card-price">$${fmtPrice(t.price_usd)}</div>
+      <div class="score-badge ${scoreClass === 'high' ? 'hi' : scoreClass === 'medium' ? 'mid' : 'lo'}">
+        ${s.score}
+      </div>
     </div>
 
-    <div class="card-stats">
-      <div class="stat"><span class="label">Market Cap</span><span class="value">$${fmtNum(t.market_cap_usd)}</span></div>
-      <div class="stat"><span class="label">Liquidity</span><span class="value">$${fmtNum(t.liquidity_usd)}</span></div>
-      <div class="stat"><span class="label">Vol 24h (real)</span><span class="value">$${fmtNum(t.real_volume_24h_usd)}</span></div>
-      <div class="stat"><span class="label">Vol 1h</span><span class="value">$${fmtNum(t.volume_1h_usd)}</span></div>
-      <div class="stat"><span class="label">Holders</span><span class="value">${fmtNum(t.holder_count, true)}</span></div>
-      <div class="stat"><span class="label">Top-10 %</span><span class="value">${t.top10_holder_pct.toFixed(1)}%</span></div>
-      <div class="stat"><span class="label">B/S Ratio</span><span class="value">${t.buy_sell_ratio.toFixed(2)}</span></div>
-      <div class="stat"><span class="label">Smart Buys 24h</span><span class="value">${t.smart_buy_24h}</span></div>
+    <div class="card-meta">
+      ${setupBadge(s.setup)}
+      ${confBadge(s.confidence)}
+      ${riskBadge(s.risk)}
     </div>
 
-    <div class="card-flags">
-      ${t.contract_renounced ? '<span class="badge renounced">✔ Renounced</span>' : ""}
-      ${t.lp_burned          ? '<span class="badge lp-burned">🔥 LP Burned</span>' : ""}
-      ${t.is_honeypot        ? '<span class="badge honeypot">⚠ Honeypot</span>'   : ""}
-      ${t.smart_money_count > 0 ? `<span class="badge sm">SM: ${t.smart_money_count}</span>` : ""}
-      <span class="badge source">${escHtml(t.source)}</span>
+    ${s.reasons?.length ? `
+    <div class="card-reasons">
+      ${s.reasons.map(r => `<span>${esc(r)}</span>`).join('')}
+    </div>` : ''}
+
+    <div class="card-footer">
+      <span class="card-mint" title="${esc(s.token)}">${esc(s.token)}</span>
+      <span>${relTime(s.timestamp)}</span>
     </div>
-
-    <div class="card-age">Age: ${ageStr}</div>
-  `;
-  return el;
+  `
+  return el
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
-function fmtNum(n, integer = false) {
-  if (n === null || n === undefined || n === 0) return "—";
-  if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
-  return integer ? Math.round(n).toString() : n.toFixed(0);
+// ── Badge builders ────────────────────────────────────────────────────────────
+function setupBadge(setup) {
+  const cls = setup === 'EARLY_SNIPER' ? 'setup-early'
+            : setup === 'MOMENTUM'     ? 'setup-mom'
+            :                           'setup-late'
+  return `<span class="badge ${cls}">${esc(setup || '—')}</span>`
+}
+function confBadge(c) {
+  const cls = c === 'HIGH' ? 'conf-high' : c === 'MEDIUM' ? 'conf-medium' : 'conf-low'
+  return `<span class="badge ${cls}">${esc(c || '—')}</span>`
+}
+function riskBadge(r) {
+  const cls = r === 'LOW' ? 'risk-low' : r === 'MEDIUM' ? 'risk-medium' : 'risk-high'
+  return `<span class="badge ${cls}">Risk: ${esc(r || '—')}</span>`
 }
 
-function fmtPrice(p) {
-  if (!p) return "0";
-  if (p < 0.000001) return p.toExponential(2);
-  if (p < 0.01)     return p.toFixed(6);
-  if (p < 1)        return p.toFixed(4);
-  return p.toFixed(2);
+// ── Stats polling ─────────────────────────────────────────────────────────────
+async function fetchStats() {
+  try {
+    const r = await fetch('/api/stats')
+    if (!r.ok) return
+    const { pipeline: p, state: st } = await r.json()
+
+    document.getElementById('hs-total').textContent   = fmtNum(p.total)
+    document.getElementById('hs-reject').textContent  = p.rejectRatePct + '%'
+    document.getElementById('hs-scored').textContent  = fmtNum(p.scored)
+    document.getElementById('hs-emitted').textContent = fmtNum(p.emitted)
+    document.getElementById('hs-tokens').textContent  = fmtNum(st.tokens)
+    document.getElementById('hs-wallets').textContent = fmtNum(st.wallets)
+  } catch { /* ignore */ }
 }
 
-function formatAge(secs) {
-  if (!secs) return "—";
-  if (secs < 60)     return `${secs}s`;
-  if (secs < 3600)   return `${Math.floor(secs / 60)}m`;
-  if (secs < 86400)  return `${Math.floor(secs / 3600)}h`;
-  return `${Math.floor(secs / 86400)}d`;
+// ── Controls ──────────────────────────────────────────────────────────────────
+const slider = document.getElementById('score-threshold')
+const thVal  = document.getElementById('threshold-val')
+
+slider.addEventListener('input', () => {
+  threshold = parseInt(slider.value)
+  thVal.textContent = threshold
+  renderSignals()
+})
+
+document.getElementById('clear-btn').addEventListener('click', () => {
+  signals = []
+  renderSignals()
+})
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function setStatus(state, text) {
+  const dot  = document.getElementById('status-dot')
+  const span = document.getElementById('status-text')
+  dot.className  = `dot ${state}`
+  span.textContent = text
 }
 
-function setStatus(state) {
-  const dot = document.getElementById("status-dot");
-  dot.className = `dot ${state}`;
-  dot.title = state;
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
-function escHtml(str) {
-  return String(str ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+function fmtNum(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K'
+  return String(n)
 }
 
-// ── Bootstrap ──────────────────────────────────────────────────────────────
-document.getElementById("apply-btn").addEventListener("click", applyFilters);
-document.getElementById("reset-btn").addEventListener("click", resetFilters);
+function relTime(ts) {
+  if (!ts) return ''
+  const secs = Math.round((Date.now() - ts) / 1_000)
+  if (secs < 60)  return `${secs}s ago`
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`
+  return `${Math.floor(secs / 3600)}h ago`
+}
 
-connectSSE();
+// ── Boot ──────────────────────────────────────────────────────────────────────
+connectSSE()
+setInterval(fetchStats, STATS_POLL)
+fetchStats()
