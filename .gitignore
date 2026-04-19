@@ -1,0 +1,27 @@
+# Environment — NEVER commit this
+.env
+
+# Database — contains wallet data, gitignore to avoid large commits
+smart_money.db
+smart_money.db-wal
+smart_money.db-shm
+
+# Wallet JSON snapshots
+wallets_*.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solana Smart Money Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* ===================== RESET & BASE ===================== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #080c10;
+    --surface:  #0d1318;
+    --surface2: #111920;
+    --border:   #1a2530;
+    --green:    #00f5a0;
+    --blue:     #00c8ff;
+    --orange:   #ff6b35;
+    --yellow:   #ffcc00;
+    --red:      #ff3b5c;
+    --muted:    #4a6375;
+    --text:     #d0e8f0;
+    --text2:    #7a9db0;
+    --mono:     'Space Mono', monospace;
+    --ui:       'Syne', sans-serif;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--ui); }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(0,245,160,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,245,160,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .app { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ===================== HEADER ===================== */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 32px; height: 32px; }
+  .logo-text { font-size: 15px; font-weight: 800; letter-spacing: 0.05em; color: var(--green); }
+  .logo-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .header-right { display: flex; align-items: center; gap: 16px; }
+  .live-dot-wrap { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); font-family: var(--mono); }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(0,245,160,0.6); } 50% { opacity:.7; box-shadow: 0 0 0 6px rgba(0,245,160,0); } }
+  .last-update { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  /* ===================== TABS ===================== */
+  .tab-bar {
+    display: flex; gap: 2px; padding: 0 24px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .tab-btn {
+    padding: 12px 20px; font-family: var(--ui); font-size: 13px; font-weight: 600;
+    color: var(--muted); background: none; border: none; cursor: pointer;
+    border-bottom: 2px solid transparent; transition: all .2s;
+    letter-spacing: 0.04em;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--green); border-bottom-color: var(--green); }
+
+  /* ===================== MAIN CONTENT ===================== */
+  .main { flex: 1; padding: 20px 24px; overflow: auto; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; animation: fadeIn .25s ease; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: none; } }
+
+  /* ===================== STAT CARDS ===================== */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--accent, var(--green));
+  }
+  .stat-label { font-size: 11px; color: var(--text2); font-family: var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+  .stat-value { font-size: 26px; font-weight: 800; margin-top: 6px; color: var(--accent, var(--green)); }
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+
+  /* ===================== TOOLBAR ===================== */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .search-box {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; flex: 1; min-width: 200px;
+  }
+  .search-box input {
+    background: none; border: none; outline: none; color: var(--text);
+    font-family: var(--mono); font-size: 13px; width: 100%;
+  }
+  .search-box input::placeholder { color: var(--muted); }
+  .search-icon { color: var(--muted); font-size: 14px; }
+  .btn-group { display: flex; gap: 4px; }
+  .btn {
+    padding: 7px 14px; border-radius: 7px; font-family: var(--ui); font-size: 12px;
+    font-weight: 600; cursor: pointer; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text2); transition: all .15s;
+    letter-spacing: .04em;
+  }
+  .btn:hover { border-color: var(--green); color: var(--green); }
+  .btn.active { background: rgba(0,245,160,.12); border-color: var(--green); color: var(--green); }
+  select.btn { appearance: none; -webkit-appearance: none; padding-right: 24px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%234a6375'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center; }
+
+  /* ===================== TABLE ===================== */
+  .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12px; }
+  thead th {
+    background: var(--surface2); padding: 10px 14px; text-align: left;
+    color: var(--text2); font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+    cursor: pointer; user-select: none; white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+  }
+  thead th:hover { color: var(--green); }
+  thead th.sorted { color: var(--green); }
+  tbody tr {
+    border-bottom: 1px solid var(--border); transition: background .15s;
+    cursor: pointer;
+  }
+  tbody tr:hover { background: rgba(0,245,160,.04); }
+  tbody tr:last-child { border-bottom: none; }
+  td { padding: 11px 14px; vertical-align: middle; }
+
+  /* ===================== BADGES ===================== */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700;
+    font-family: var(--ui); letter-spacing: .04em; white-space: nowrap;
+  }
+  .badge-diamond  { background: rgba(0,245,160,.15);  color: var(--green);  border: 1px solid rgba(0,245,160,.3); }
+  .badge-longhold { background: rgba(0,200,255,.15);  color: var(--blue);   border: 1px solid rgba(0,200,255,.3); }
+  .badge-flipper  { background: rgba(255,204,0,.12);  color: var(--yellow); border: 1px solid rgba(255,204,0,.25); }
+  .badge-rug      { background: rgba(255,59,92,.12);  color: var(--red);    border: 1px solid rgba(255,59,92,.25); }
+  .badge-new      { background: rgba(0,245,160,.1);   color: var(--green);  border: 1px solid rgba(0,245,160,.25); }
+  .badge-trending { background: rgba(0,200,255,.1);   color: var(--blue);   border: 1px solid rgba(0,200,255,.25); }
+  .badge-graduated{ background: rgba(255,204,0,.1);   color: var(--yellow); border: 1px solid rgba(255,204,0,.2); }
+  .badge-risk-low { background: rgba(0,245,160,.1);   color: var(--green);  border: 1px solid rgba(0,245,160,.2); }
+  .badge-risk-med { background: rgba(255,107,53,.1);  color: var(--orange); border: 1px solid rgba(255,107,53,.2); }
+  .badge-risk-high{ background: rgba(255,59,92,.12);  color: var(--red);    border: 1px solid rgba(255,59,92,.25); }
+
+  /* ===================== SCORE BAR ===================== */
+  .score-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .score-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; min-width: 60px; }
+  .score-bar-fill { height: 100%; border-radius: 2px; transition: width .4s; }
+  .score-num { font-size: 12px; font-weight: 700; min-width: 28px; text-align: right; }
+
+  /* ===================== CHANGE CELLS ===================== */
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .neu { color: var(--muted); }
+
+  /* ===================== DETAIL PANEL ===================== */
+  .detail-row { display: none; }
+  .detail-row.open { display: table-row; }
+  .detail-panel {
+    background: var(--surface2); padding: 16px 20px;
+    border-top: 1px solid var(--border);
+  }
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .detail-item label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); display: block; margin-bottom: 4px; }
+  .detail-item span { font-size: 13px; font-family: var(--mono); color: var(--text); word-break: break-all; }
+
+  /* ===================== ADDRESS ===================== */
+  .addr { font-family: var(--mono); color: var(--text2); }
+  .addr span { color: var(--blue); }
+  .copy-btn { margin-left: 6px; cursor: pointer; color: var(--muted); font-size: 11px; }
+  .copy-btn:hover { color: var(--green); }
+
+  /* ===================== ACTIVITY FEED ===================== */
+  .activity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 768px) { .activity-grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; overflow: hidden;
+  }
+  .panel-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--text2); margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+  }
+  .feed-list { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
+  .feed-item {
+    display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+    background: var(--surface2); border-radius: 8px; border-left: 3px solid var(--border);
+    animation: slideIn .3s ease;
+  }
+  @keyframes slideIn { from { opacity:0; transform: translateX(-8px); } to { opacity:1; transform:none; } }
+  .feed-item.buy  { border-left-color: var(--green); }
+  .feed-item.sell { border-left-color: var(--red); }
+  .feed-item.rug  { border-left-color: var(--red); background: rgba(255,59,92,.06); }
+  .feed-icon { font-size: 14px; margin-top: 1px; }
+  .feed-body { flex: 1; }
+  .feed-main { font-size: 12px; color: var(--text); }
+  .feed-sub  { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+  .feed-time { font-size: 10px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+
+  /* ===================== CHART ===================== */
+  .chart-wrap { position: relative; height: 160px; }
+  canvas { width: 100% !important; }
+
+  /* ===================== TOP PERFORMERS ===================== */
+  .perf-list { display: flex; flex-direction: column; gap: 8px; }
+  .perf-item { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--surface2); border-radius: 8px; }
+  .perf-rank { font-size: 18px; font-weight: 800; color: var(--muted); width: 24px; text-align: center; }
+  .perf-body { flex: 1; }
+  .perf-addr { font-family: var(--mono); font-size: 12px; color: var(--blue); }
+  .perf-label { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .perf-pnl { font-size: 14px; font-weight: 700; color: var(--green); font-family: var(--mono); }
+
+  /* ===================== SETUP TAB ===================== */
+  .setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 900px) { .setup-grid { grid-template-columns: 1fr; } }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .form-group input, .form-group select {
+    width: 100%; padding: 9px 12px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-family: var(--mono); font-size: 13px; outline: none;
+    transition: border-color .15s;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--green); }
+  .slider-row { display: flex; align-items: center; gap: 12px; }
+  .slider-row input[type=range] { flex: 1; accent-color: var(--green); }
+  .slider-val { font-family: var(--mono); font-size: 13px; color: var(--green); min-width: 50px; text-align: right; }
+  .code-block {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; font-family: var(--mono); font-size: 11px; color: var(--text2);
+    overflow-x: auto; white-space: pre; line-height: 1.7; max-height: 400px; overflow-y: auto;
+  }
+  .code-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .copy-all-btn {
+    padding: 5px 12px; border-radius: 6px; font-size: 11px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); color: var(--text2);
+    font-family: var(--ui); transition: all .15s;
+  }
+  .copy-all-btn:hover { border-color: var(--green); color: var(--green); }
+  .btn-save {
+    padding: 10px 24px; border-radius: 8px; font-family: var(--ui); font-size: 13px; font-weight: 700;
+    cursor: pointer; border: none; background: var(--green); color: #000; letter-spacing: .04em;
+    transition: opacity .15s;
+  }
+  .btn-save:hover { opacity: .85; }
+
+  /* ===================== EMPTY STATE ===================== */
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+
+  /* ===================== PRICE ===================== */
+  .price { font-family: var(--mono); }
+  .token-name { font-weight: 700; color: var(--text); font-family: var(--ui); }
+  .token-addr { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+
+  /* ===================== SCROLLBAR ===================== */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ===================== RESPONSIVE ===================== */
+  @media (max-width: 600px) {
+    .main { padding: 14px 12px; }
+    header { padding: 10px 12px; }
+    .tab-btn { padding: 10px 12px; font-size: 12px; }
+    .stat-value { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <svg class="logo-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="15" stroke="#00f5a0" stroke-width="1.5" fill="rgba(0,245,160,0.06)"/>
+      <path d="M8 20L13 14L17 18L22 11" stroke="#00f5a0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="22" cy="11" r="2.5" fill="#00f5a0"/>
+    </svg>
+    <div>
+      <div class="logo-text">SMART MONEY</div>
+      <div class="logo-sub">Solana Wallet Intelligence</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-dot-wrap" id="live-mode-wrap"><div class="live-dot"></div><span id="live-mode-label">LIVE</span></div>
+    <div class="last-update" id="lastUpdate">Updated: —</div>
+  </div>
+</header>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('coins')">📊 Coins</button>
+  <button class="tab-btn" onclick="switchTab('wallets')">💎 Smart Wallets</button>
+  <button class="tab-btn" onclick="switchTab('activity')">⚡ Live Activity</button>
+  <button class="tab-btn" onclick="switchTab('setup')">⚙️ Setup & API</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- ============ TAB 1: COINS ============ -->
+  <div id="tab-coins" class="tab-content active">
+    <div class="stat-grid">
+      <div class="stat-card" style="--accent: var(--green)">
+        <div class="stat-label">Trending Tokens</div>
+        <div class="stat-value" id="sc-trending">—</div>
+        <div class="stat-sub">active right now</div>
+      </div>
+      <div class="stat-card" style="--accent: var(--blue)">
+        <div class="stat-label">Smart Money Buys</div>
+        <div class="stat-value" id="sc-smbuys">—</div>
+        <div class="stat-sub">last 6h</div>
+      </div>
+      <div class="stat-card" style="--accent: var(--yellow)">
+        <div class="stat-label">Avg MCAP</div>
+        <div class="stat-value" id="sc-avgmcap">—</div>
+        <div class="stat-sub">trending tokens</div>
+      </div>
+      <div class="stat-card" style="--accent: var(--red)">
+        <div class="stat-label">Rug Flags</div>
+        <div class="stat-value" id="sc-rugflags">—</div>
+        <div class="stat-sub">potential rugs</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="coin-search" placeholder="Search token name or address…" oninput="renderCoins()">
+      </div>
+      <div class="btn-group" id="period-btns">
+        <button class="btn" onclick="setPeriod('1h')">1H</button>
+        <button class="btn active" onclick="setPeriod('6h')">6H</button>
+        <button class="btn" onclick="setPeriod('24h')">24H</button>
+      </div>
+      <select class="btn" id="coin-sort" onchange="renderCoins()">
+        <option value="smartmoney">Sort: Smart Money</option>
+        <option value="volume">Sort: Volume</option>
+        <option value="marketcap">Sort: Market Cap</option>
+        <option value="swaps">Sort: Swaps</option>
+      </select>
+    </div>
+
+    <div class="table-wrap">
+      <table id="coins-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Token</th>
+            <th onclick="sortCoins('price')">Price</th>
+            <th onclick="sortCoins('change5m')">5m%</th>
+            <th onclick="sortCoins('change1h')">1h%</th>
+            <th onclick="sortCoins('marketCap')">Market Cap</th>
+            <th onclick="sortCoins('volume1h')">Vol 1h</th>
+            <th onclick="sortCoins('holders')">Holders</th>
+            <th onclick="sortCoins('smartMoneyCount')">SM Buys</th>
+            <th>Risk</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="coins-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ TAB 2: SMART WALLETS ============ -->
+  <div id="tab-wallets" class="tab-content">
+    <div class="stat-grid">
+      <div class="stat-card" style="--accent: var(--green)">
+        <div class="stat-label">💎 Diamond</div>
+        <div class="stat-value" id="wc-diamond">—</div>
+        <div class="stat-sub">score ≥ 70</div>
+      </div>
+      <div class="stat-card" style="--accent: var(--blue)">
+        <div class="stat-label">🟢 Long Hold</div>
+        <div class="stat-value" id="wc-longhold">—</div>
+        <div class="stat-sub">score 45–69</div>
+      </div>
+      <div class="stat-card" style="--accent: var(--yellow)">
+        <div class="stat-label">🟡 Flipper</div>
+        <div class="stat-value" id="wc-flipper">—</div>
+        <div class="stat-sub">score 10–44</div>
+      </div>
+      <div class="stat-card" style="--accent: var(--red)">
+        <div class="stat-label">🔴 Rug Chaser</div>
+        <div class="stat-value" id="wc-rug">—</div>
+        <div class="stat-sub">score &lt; 10</div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="wallet-search" placeholder="Search wallet address…" oninput="renderWallets()">
+      </div>
+      <select class="btn" id="wallet-label-filter" onchange="renderWallets()">
+        <option value="">All Labels</option>
+        <option value="Diamond_Profitable">💎 Diamond</option>
+        <option value="Long_Hold_Green">🟢 Long Hold</option>
+        <option value="Short_Flipper">🟡 Flipper</option>
+        <option value="Rug_Chaser">🔴 Rug Chaser</option>
+      </select>
+      <select class="btn" id="wallet-sort" onchange="renderWallets()">
+        <option value="score">Sort: Score</option>
+        <option value="total_pnl">Sort: PnL</option>
+        <option value="win_rate">Sort: Win Rate</option>
+        <option value="avg_hold_hrs">Sort: Avg Hold</option>
+      </select>
+    </div>
+
+    <div class="table-wrap">
+      <table id="wallets-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Address</th>
+            <th>Label</th>
+            <th>Score</th>
+            <th>Total PnL</th>
+            <th>Win Rate</th>
+            <th>Avg Hold</th>
+            <th>Coins</th>
+            <th>First Seen</th>
+          </tr>
+        </thead>
+        <tbody id="wallets-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ TAB 3: LIVE ACTIVITY ============ -->
+  <div id="tab-activity" class="tab-content">
+    <div class="stat-grid" style="margin-bottom:20px">
+      <div class="stat-card" style="--accent: var(--green)">
+        <div class="stat-label">Total Wallets</div>
+        <div class="stat-value" id="ac-buys">—</div>
+        <div class="stat-sub">tracked in DB</div>
+      </div>
+      <div class="stat-card" style="--accent: var(--blue)">
+        <div class="stat-label">Total PnL (tracked)</div>
+        <div class="stat-value" id="ac-sells">—</div>
+        <div class="stat-sub">sum of all wallets</div>
+      </div>
+      <div class="stat-card" style="--accent: var(--green)">
+        <div class="stat-label">Avg Score</div>
+        <div class="stat-value" id="ac-avgscore">—</div>
+        <div class="stat-sub">across all wallets</div>
+      </div>
+      <div class="stat-card" style="--accent: var(--red)">
+        <div class="stat-label">Rug Chasers</div>
+        <div class="stat-value" id="ac-rugs">—</div>
+        <div class="stat-sub">score &lt; 10</div>
+      </div>
+    </div>
+
+    <div class="activity-grid">
+      <div>
+        <div class="panel">
+          <div class="panel-title"><div class="live-dot"></div> Recent Positions</div>
+          <div class="feed-list" id="feed-list"></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="panel">
+          <div class="panel-title">📊 Label Distribution</div>
+          <div class="chart-wrap"><canvas id="dist-chart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">🏆 Top 5 by PnL</div>
+          <div class="perf-list" id="perf-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TAB 4: SETUP ============ -->
+  <div id="tab-setup" class="tab-content">
+    <div class="setup-grid">
+      <div>
+        <div class="panel" style="margin-bottom:16px">
+          <div class="panel-title">🔑 API Keys</div>
+          <div class="form-group">
+            <label>GMGN Agent API Key <span style="color:var(--green)">(primary — required)</span></label>
+            <input type="password" id="cfg-gmgn" placeholder="gmgn_10a… — get free at gmgn.ai/ai" value="">
+          </div>
+          <div class="form-group">
+            <label>Helius API Key <span style="color:var(--text2)">(fallback enrichment)</span></label>
+            <input type="password" id="cfg-helius" placeholder="dev.helius.xyz — free tier 100k credits/mo" value="">
+          </div>
+          <div class="form-group">
+            <label>Apify Token <span style="color:var(--muted)">(emergency fallback only)</span></label>
+            <input type="password" id="cfg-apify" placeholder="apify_api_… (optional)" value="">
+          </div>
+          <button class="btn-save" onclick="saveConfig()">Save to .env</button>
+          <p style="font-size:11px;color:var(--muted);margin-top:10px;font-family:var(--mono)">
+            Keys are saved to your local .env file only — never transmitted.<br>
+            GMGN CLI is the primary source and handles top traders + wallet enrichment.
+          </p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">🎛️ Filter Thresholds</div>
+          <div class="form-group">
+            <label>Min PnL — Diamond ($)</label>
+            <div class="slider-row">
+              <input type="range" min="1000" max="100000" step="1000" value="10000" id="sl-pnl-diamond" oninput="updateSlider(this,'sl-pnl-diamond-val','$')">
+              <span class="slider-val" id="sl-pnl-diamond-val">$10,000</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Min Hold Time (hrs)</label>
+            <div class="slider-row">
+              <input type="range" min="1" max="96" step="1" value="12" id="sl-hold" oninput="updateSlider(this,'sl-hold-val','','h')">
+              <span class="slider-val" id="sl-hold-val">12h</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Win Rate Bonus Threshold</label>
+            <div class="slider-row">
+              <input type="range" min="0.1" max="0.9" step="0.05" value="0.55" id="sl-winrate" oninput="updateSlider(this,'sl-winrate-val','','','%',100)">
+              <span class="slider-val" id="sl-winrate-val">55%</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Rug Chaser Max Hold (mins)</label>
+            <div class="slider-row">
+              <input type="range" min="5" max="120" step="5" value="30" id="sl-rug" oninput="updateSlider(this,'sl-rug-val','','min')">
+              <span class="slider-val" id="sl-rug-val">30min</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel" style="margin-bottom:16px">
+          <div class="code-header">
+            <div class="panel-title" style="margin:0">📋 Python Filter Script</div>
+            <button class="copy-all-btn" onclick="copyScript()">Copy</button>
+          </div>
+          <div class="code-block" id="script-display">Loading script…</div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-title">🔗 Data Sources & CLI Reference</div>
+          <div class="code-block" style="font-size:10px">
+# ── GMGN CLI (primary — uses your API key) ──────────────────
+# Top traders for a token (with realized PnL, hold times)
+npx gmgn-cli token traders --chain sol --address MINT --order-by profit --raw
+
+# Wallet 7d stats (PnL, win rate, avg hold time)
+npx gmgn-cli portfolio stats --chain sol --wallet ADDRESS --period 7d --raw
+
+# Trending tokens
+npx gmgn-cli market trending --chain sol --raw
+
+# Smart Money trades (live feed)
+npx gmgn-cli track smartmoney --chain sol --limit 100 --raw
+
+# ── Server proxy endpoints ───────────────────────────────────
+GET /proxy/gmgn/rank?period=6h&orderby=smartmoney&limit=20
+GET /api/wallet-stats?address=WALLET&period=7d
+GET /api/activity          (recent positions from DB)
+GET /api/sm-token-counts   (SM wallet count per token)
+GET /api/top-wallets       (top 10 by PnL from DB)
+
+# ── Pipeline ─────────────────────────────────────────────────
+python main.py --period 6h --limit 20
+python main.py --period 24h --limit 20</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ============================================================
+// DATA & STATE
+// ============================================================
+let COINS = [];
+let WALLETS = [];
+let FEED_ITEMS = [];
+let coinSortKey = 'smartmoney';
+let coinSortDir = -1;
+let walletSortKey = 'score';
+let currentPeriod = '6h';
+let refreshInterval = null;
+
+// ============================================================
+// MOCK DATA GENERATORS
+// ============================================================
+const NAMES = ['BONK','WIF','POPCAT','MEW','BOME','SLERF','JELLY','TURBO','GOAT','PONKE','SILLY','MICHI','RETARDIO','FWOG','MOODENG','CHILLGUY'];
+const TICKER_EXTRA = ['PEPE2','SIGMA','HOPPY','FOMO','GIGA','CHAD','WOJAK','PEEP','SNEK','NOOT','BODEN','TREMP','HABIBI','GUAC','DINOEGG'];
+const ALL_NAMES = [...NAMES,...TICKER_EXTRA];
+
+function randAddr() { const chars='0123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'; return Array.from({length:44},()=>chars[Math.floor(Math.random()*chars.length)]).join(''); }
+function randFloat(a,b,d=4) { return parseFloat((Math.random()*(b-a)+a).toFixed(d)); }
+function randInt(a,b) { return Math.floor(Math.random()*(b-a+1))+a; }
+function fmt(n,d=2) { if(Math.abs(n)>=1e9) return (n/1e9).toFixed(1)+'B'; if(Math.abs(n)>=1e6) return (n/1e6).toFixed(1)+'M'; if(Math.abs(n)>=1e3) return (n/1e3).toFixed(1)+'K'; return n.toFixed(d); }
+function fmtPnl(n) { const s=n>=0?'+':'-'; return s+'$'+fmt(Math.abs(n),0); }
+function fmtPct(n) { return (n>=0?'+':'')+n.toFixed(2)+'%'; }
+function fmtAddr(a) { return `<span class="addr"><span>${a.slice(0,6)}</span>...${a.slice(-4)}</span>`; }
+function timeAgo(d) { const s=Math.floor((Date.now()-d)/1000); if(s<60) return s+'s ago'; if(s<3600) return Math.floor(s/60)+'m ago'; return Math.floor(s/3600)+'h ago'; }
+
+function genCoin(rank, nameIdx) {
+  const name = ALL_NAMES[nameIdx % ALL_NAMES.length];
+  const mcap = randFloat(100_000, 50_000_000, 0);
+  const price = randFloat(0.000001, 0.01, 8);
+  const c5m = randFloat(-25, 40, 2);
+  const c1h = randFloat(-40, 80, 2);
+  const risk = mcap < 500_000 ? 'HIGH' : mcap < 5_000_000 ? 'MED' : 'LOW';
+  const statuses = ['New','Trending','Graduated'];
+  const status = mcap > 10_000_000 ? 'Graduated' : mcap > 2_000_000 ? 'Trending' : 'New';
+  return {
+    rank, name,
+    address: randAddr(),
+    price, change5m: c5m, change1h: c1h,
+    marketCap: mcap, volume1h: randFloat(10_000, 5_000_000, 0),
+    holders: randInt(50, 8000), smartMoneyCount: randInt(0, 15),
+    risk, status,
+    liquidity: randFloat(5_000, 2_000_000, 0),
+    buySellRatio: randFloat(0.3, 2.5, 2),
+    devWalletPct: randFloat(0, 15, 1),
+    top10HolderPct: randFloat(20, 80, 1),
+  };
+}
+
+function genWallet(rank) {
+  const score = randInt(-5, 95);
+  let label;
+  if (score >= 70) label = 'Diamond_Profitable';
+  else if (score >= 45) label = 'Long_Hold_Green';
+  else if (score >= 10) label = 'Short_Flipper';
+  else label = 'Rug_Chaser';
+  const daysAgo = randInt(1, 180);
+  const firstSeen = new Date(Date.now() - daysAgo*86400000).toISOString().slice(0,10);
+  return {
+    rank, address: randAddr(), label, score,
+    total_pnl: randFloat(-5000, 150000, 0),
+    win_rate: randFloat(0.1, 0.95, 2),
+    avg_hold_hrs: randFloat(0.1, 120, 1),
+    coin_count: randInt(1, 25),
+    quick_flips: randInt(0, 20),
+    last_seen: new Date().toISOString(),
+    first_seen: firstSeen,
+  };
+}
+
+function genFeedItem() {
+  const types = ['buy','buy','buy','sell','rug'];
+  const type = types[randInt(0,types.length-1)];
+  const labels = ['Diamond_Profitable','Long_Hold_Green','Short_Flipper','Rug_Chaser'];
+  const weights = [0.15, 0.3, 0.35, 0.2];
+  let r = Math.random(), cumW = 0, label = 'Short_Flipper';
+  for(let i=0;i<labels.length;i++) { cumW+=weights[i]; if(r<cumW){label=labels[i];break;} }
+  const token = ALL_NAMES[randInt(0,ALL_NAMES.length-1)];
+  const amount = randFloat(50, 50000, 0);
+  return {
+    type, label, token,
+    wallet: randAddr(),
+    amount, timestamp: Date.now() - randInt(0, 3600000),
+  };
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function initMockData() {
+  COINS = Array.from({length:20},(_,i)=>genCoin(i+1,i));
+  WALLETS = Array.from({length:50},(_,i)=>genWallet(i+1));
+  FEED_ITEMS = Array.from({length:20},()=>genFeedItem());
+}
+
+async function tryLoadRealWallets() {
+  const paths = isRunningViaServer()
+    ? ['/exports/wallets_latest.json', '../exports/wallets_latest.json']
+    : ['../exports/wallets_latest.json'];
+  for (const p of paths) {
+    try {
+      const r = await fetch(p);
+      if (!r.ok) continue;
+      const data = await r.json();
+      if (data && data.length > 0) {
+        WALLETS = data.map((w,i) => ({...w, rank: i+1}));
+        console.log(`[Dashboard] Loaded ${WALLETS.length} real wallets from ${p}`);
+        return true;
+      }
+    } catch(e) { /* try next */ }
+  }
+  console.log('[Dashboard] No real wallet data found, using mock data');
+  return false;
+}
+
+function isRunningViaServer() {
+  return window.location.protocol === 'http:' || window.location.protocol === 'https:';
+}
+
+function getProxyBase() {
+  return `${window.location.protocol}//${window.location.host}`;
+}
+
+let SM_TOKEN_COUNTS = {};  // mint → count of tracked SM wallets
+
+async function tryLoadSmTokenCounts() {
+  if (!isRunningViaServer()) return false;
+  try {
+    const r = await fetch(`${getProxyBase()}/api/sm-token-counts`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (!data.counts || Object.keys(data.counts).length === 0) return false;
+    SM_TOKEN_COUNTS = data.counts;
+    // Overlay onto COINS array
+    COINS.forEach(c => {
+      if (SM_TOKEN_COUNTS[c.address]) {
+        c.smartMoneyCount = SM_TOKEN_COUNTS[c.address];
+      }
+    });
+    console.log(`[Dashboard] Loaded SM token counts for ${Object.keys(SM_TOKEN_COUNTS).length} tokens`);
+    return true;
+  } catch(e) {
+    console.log('[Dashboard] SM token counts fetch failed:', e.message);
+    return false;
+  }
+}
+
+async function tryLoadRealActivity() {
+  if (!isRunningViaServer()) return false;
+  try {
+    const r = await fetch(`${getProxyBase()}/api/activity`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (!data.items || data.items.length === 0) return false;
+    FEED_ITEMS = data.items.map(item => ({
+      type:         item.type || 'buy',
+      label:        item.label || 'Unknown',
+      token:        item.token || '',
+      wallet:       item.wallet || '',
+      amount:       Math.abs(item.pnl || 0),
+      hold_minutes: item.hold_minutes || 0,
+      score:        item.score || 0,
+      timestamp:    item.seen_at ? new Date(item.seen_at).getTime() : Date.now(),
+    }));
+    console.log(`[Dashboard] Loaded ${FEED_ITEMS.length} real activity items`);
+    return true;
+  } catch(e) {
+    console.log('[Dashboard] Activity fetch failed:', e.message);
+    return false;
+  }
+}
+
+async function tryLoadRealCoins(period='6h') {
+  if (!isRunningViaServer()) {
+    console.log('[Dashboard] Running as file://, skipping live coin fetch. Run python server.py for live data.');
+    return false;
+  }
+  try {
+    const url = `${getProxyBase()}/proxy/gmgn/rank?period=${period}&orderby=smartmoney&limit=20`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`proxy ${r.status}`);
+    const data = await r.json();
+    if (data.code === 0 && data.data?.rank?.length > 0) {
+      COINS = data.data.rank.slice(0,20).map((t,i) => ({
+        rank: i+1, name: t.symbol || t.name || 'Unknown',
+        address: t.address || '', price: t.price || 0,
+        change5m: t.price_change_percent5m || 0,
+        change1h: t.price_change_percent1h || 0,
+        marketCap: t.market_cap || 0,
+        volume1h: t.volume || t.swaps || 0,
+        holders: t.holder_count || 0,
+        smartMoneyCount: t.smart_degen_count || 0,
+        risk: (t.market_cap||0) < 500000 ? 'HIGH' : (t.market_cap||0) < 5000000 ? 'MED' : 'LOW',
+        status: (t.market_cap||0) > 10000000 ? 'Graduated' : (t.market_cap||0) > 2000000 ? 'Trending' : 'New',
+        liquidity: t.liquidity || 0,
+        buySellRatio: t.buy_count ? t.buy_count / Math.max(t.sell_count||1,1) : 1,
+        devWalletPct: 0, top10HolderPct: 0,
+      }));
+      console.log(`[Dashboard] Loaded ${COINS.length} real tokens from GMGN via proxy`);
+      document.getElementById('lastUpdate').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+      return true;
+    }
+  } catch(e) {
+    console.log('[Dashboard] Proxy fetch failed:', e.message, '— using mock data');
+  }
+  return false;
+}
+
+async function init() {
+  initMockData();
+  updateTimestamp();
+
+  const [gotWallets, gotCoins, gotActivity] = await Promise.all([tryLoadRealWallets(), tryLoadRealCoins(), tryLoadRealActivity()]);
+  if (gotCoins) await tryLoadSmTokenCounts();
+
+  // Update live/mock badge
+  const liveLabel = document.getElementById('live-mode-label');
+  const liveWrap = document.getElementById('live-mode-wrap');
+  if (gotCoins || gotWallets || gotActivity) {
+    liveLabel.textContent = 'LIVE';
+    liveWrap.style.color = 'var(--green)';
+  } else {
+    liveLabel.textContent = isRunningViaServer() ? 'MOCK (no data yet)' : 'MOCK (run server.py)';
+    liveWrap.style.color = 'var(--yellow)';
+    document.querySelector('.live-dot').style.background = 'var(--yellow)';
+  }
+  // Shadow the original Promise.all so we don't double-await below
+
+  renderCoins();
+  renderWallets();
+  renderActivity();
+  updateStats();
+  loadScriptDisplay();
+
+  // Auto-refresh every 8s
+  refreshInterval = setInterval(async () => {
+    // If we have real activity data, re-poll; otherwise inject mock feed items
+    if (isRunningViaServer()) {
+      await tryLoadRealActivity();
+    } else {
+      FEED_ITEMS.unshift(genFeedItem());
+      if(FEED_ITEMS.length > 50) FEED_ITEMS.pop();
+    }
+    updateStats();
+    if(document.getElementById('tab-activity').classList.contains('active')) renderFeed();
+    updateTimestamp();
+  }, 8000);
+}
+
+function updateTimestamp() {
+  document.getElementById('lastUpdate').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(id) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if(id === 'activity') { renderActivity(); }
+}
+
+// ============================================================
+// STAT UPDATES
+// ============================================================
+function updateStats() {
+  // Coins tab
+  document.getElementById('sc-trending').textContent = COINS.length;
+  document.getElementById('sc-smbuys').textContent = COINS.reduce((s,c)=>s+c.smartMoneyCount,0);
+  const avgMcap = COINS.reduce((s,c)=>s+c.marketCap,0) / Math.max(COINS.length,1);
+  document.getElementById('sc-avgmcap').textContent = '$'+fmt(avgMcap,0);
+  document.getElementById('sc-rugflags').textContent = COINS.filter(c=>c.risk==='HIGH').length;
+
+  // Wallets tab
+  const counts = {Diamond_Profitable:0,Long_Hold_Green:0,Short_Flipper:0,Rug_Chaser:0};
+  WALLETS.forEach(w=>{ if(counts[w.label]!==undefined) counts[w.label]++; });
+  document.getElementById('wc-diamond').textContent = counts['Diamond_Profitable'];
+  document.getElementById('wc-longhold').textContent = counts['Long_Hold_Green'];
+  document.getElementById('wc-flipper').textContent = counts['Short_Flipper'];
+  document.getElementById('wc-rug').textContent = counts['Rug_Chaser'];
+
+  // Activity tab — derive from real wallet data
+  const totalPnl = WALLETS.reduce((s,w)=>s+(w.total_pnl||0),0);
+  const rugCount = WALLETS.filter(w=>w.label==='Rug_Chaser').length;
+  document.getElementById('ac-buys').textContent = WALLETS.length;
+  document.getElementById('ac-sells').textContent = '$'+fmt(totalPnl,0);
+  document.getElementById('ac-rugs').textContent = rugCount;
+  const avgScore = WALLETS.length ? Math.round(WALLETS.reduce((s,w)=>s+(w.score||0),0)/WALLETS.length) : 0;
+  document.getElementById('ac-avgscore').textContent = avgScore;
+}
+
+// ============================================================
+// COINS RENDERING
+// ============================================================
+function setPeriod(p) {
+  currentPeriod = p;
+  document.querySelectorAll('#period-btns .btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === p.toUpperCase());
+  });
+  tryLoadRealCoins(p).then(async (got) => { if(got) await tryLoadSmTokenCounts(); renderCoins(); });
+}
+
+function sortCoins(key) {
+  if(coinSortKey === key) coinSortDir *= -1;
+  else { coinSortKey = key; coinSortDir = -1; }
+  renderCoins();
+}
+
+function labelBadge(label) {
+  if(label==='Diamond_Profitable') return '<span class="badge badge-diamond">💎 Diamond</span>';
+  if(label==='Long_Hold_Green')    return '<span class="badge badge-longhold">🟢 Long Hold</span>';
+  if(label==='Short_Flipper')      return '<span class="badge badge-flipper">🟡 Flipper</span>';
+  if(label==='Rug_Chaser')         return '<span class="badge badge-rug">🔴 Rug Chaser</span>';
+  return `<span class="badge">${label}</span>`;
+}
+
+function scoreColor(s) {
+  if(s>=70) return 'var(--green)';
+  if(s>=45) return 'var(--blue)';
+  if(s>=10) return 'var(--yellow)';
+  return 'var(--red)';
+}
+
+function renderCoins() {
+  const search = document.getElementById('coin-search').value.toLowerCase();
+  let data = COINS.filter(c =>
+    c.name.toLowerCase().includes(search) ||
+    c.address.toLowerCase().includes(search)
+  );
+
+  const sortKey = document.getElementById('coin-sort').value;
+  const sortMap = { smartmoney: 'smartMoneyCount', volume: 'volume1h', marketcap: 'marketCap', swaps: 'volume1h' };
+  data.sort((a,b) => (b[sortMap[sortKey]||'smartMoneyCount'] || 0) - (a[sortMap[sortKey]||'smartMoneyCount'] || 0));
+
+  const tbody = document.getElementById('coins-tbody');
+  if(!data.length) { tbody.innerHTML = `<tr><td colspan="11"><div class="empty"><div class="empty-icon">🔍</div>No tokens found</div></td></tr>`; return; }
+
+  tbody.innerHTML = data.map((c,i) => {
+    const riskBadge = c.risk==='LOW'?'badge-risk-low':c.risk==='MED'?'badge-risk-med':'badge-risk-high';
+    const statusBadge = c.status==='Graduated'?'badge-graduated':c.status==='Trending'?'badge-trending':'badge-new';
+    return `
+      <tr onclick="toggleCoinDetail(${i})">
+        <td style="color:var(--muted)">${i+1}</td>
+        <td>
+          <div class="token-name">${c.name}</div>
+          <div class="token-addr">${c.address.slice(0,8)}…${c.address.slice(-4)}</div>
+        </td>
+        <td class="price">$${c.price < 0.001 ? c.price.toFixed(8) : c.price.toFixed(6)}</td>
+        <td class="${c.change5m>=0?'pos':'neg'}">${fmtPct(c.change5m)}</td>
+        <td class="${c.change1h>=0?'pos':'neg'}">${fmtPct(c.change1h)}</td>
+        <td>$${fmt(c.marketCap,0)}</td>
+        <td>$${fmt(c.volume1h,0)}</td>
+        <td>${c.holders.toLocaleString()}</td>
+        <td style="color:var(--green);font-weight:700">${c.smartMoneyCount > 0 ? '🧠 '+c.smartMoneyCount : '—'}</td>
+        <td><span class="badge ${riskBadge}">${c.risk}</span></td>
+        <td><span class="badge ${statusBadge}">${c.status}</span></td>
+      </tr>
+      <tr class="detail-row" id="coin-detail-${i}">
+        <td colspan="11">
+          <div class="detail-panel">
+            <div class="detail-grid">
+              <div class="detail-item"><label>Contract</label><span>${c.address} <span class="copy-btn" onclick="copyText('${c.address}',event)">📋</span></span></div>
+              <div class="detail-item"><label>Liquidity</label><span>$${fmt(c.liquidity,0)}</span></div>
+              <div class="detail-item"><label>Buy/Sell Ratio</label><span>${c.buySellRatio.toFixed(2)}</span></div>
+              <div class="detail-item"><label>Top 10 Holders %</label><span>${c.top10HolderPct}%</span></div>
+              <div class="detail-item"><label>Dev Wallet %</label><span>${c.devWalletPct}%</span></div>
+              <div class="detail-item"><label>Smart Money Count</label><span>${c.smartMoneyCount} wallets</span></div>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function toggleCoinDetail(i) {
+  const row = document.getElementById(`coin-detail-${i}`);
+  row.classList.toggle('open');
+}
+
+// ============================================================
+// WALLETS RENDERING
+// ============================================================
+function renderWallets() {
+  const search = document.getElementById('wallet-search').value.toLowerCase();
+  const labelFilter = document.getElementById('wallet-label-filter').value;
+  const sortKey = document.getElementById('wallet-sort').value;
+
+  let data = WALLETS.filter(w =>
+    (!search || w.address.toLowerCase().includes(search)) &&
+    (!labelFilter || w.label === labelFilter)
+  );
+
+  data.sort((a,b) => (b[sortKey]||0) - (a[sortKey]||0));
+
+  const tbody = document.getElementById('wallets-tbody');
+  if(!data.length) { tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="empty-icon">💎</div>No wallets found</div></td></tr>`; return; }
+
+  tbody.innerHTML = data.map((w,i) => {
+    const score = w.score || 0;
+    const pct = Math.max(0, Math.min(100, score));
+    const pnl = w.total_pnl || 0;
+    const winRate = w.win_rate || 0;
+    const holdHrs = w.avg_hold_hrs || 0;
+    const holdStr = holdHrs >= 24 ? (holdHrs/24).toFixed(1)+'d' : holdHrs.toFixed(1)+'h';
+    return `
+      <tr onclick="toggleWalletDetail(${i})">
+        <td style="color:var(--muted)">${i+1}</td>
+        <td>${fmtAddr(w.address)} <span class="copy-btn" onclick="copyText('${w.address}',event)">📋</span></td>
+        <td>${labelBadge(w.label)}</td>
+        <td>
+          <div class="score-bar-wrap">
+            <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%;background:${scoreColor(score)}"></div></div>
+            <span class="score-num" style="color:${scoreColor(score)}">${score}</span>
+          </div>
+        </td>
+        <td class="${pnl>=0?'pos':'neg'}">${fmtPnl(pnl)}</td>
+        <td class="${winRate>=0.6?'pos':winRate<0.3?'neg':'neu'}">${(winRate*100).toFixed(0)}%</td>
+        <td>${holdStr}</td>
+        <td>${w.coin_count || 0}</td>
+        <td style="color:var(--muted)">${w.first_seen ? w.first_seen.slice(0,10) : '—'}</td>
+      </tr>
+      <tr class="detail-row" id="wallet-detail-${i}">
+        <td colspan="9">
+          <div class="detail-panel">
+            <div class="detail-grid">
+              <div class="detail-item"><label>Full Address</label><span style="font-size:11px;word-break:break-all">${w.address}</span></div>
+              <div class="detail-item"><label>Quick Flips</label><span>${w.quick_flips || 0} ${(w.quick_flips||0)>5?'⚠️ Bot risk':''}</span></div>
+              <div class="detail-item"><label>Last Seen</label><span>${w.last_seen ? w.last_seen.slice(0,19) : '—'}</span></div>
+              <div class="detail-item"><label>First Seen</label><span>${w.first_seen || '—'}</span></div>
+              <div class="detail-item"><label>Links</label><span>
+                <a href="https://gmgn.ai/sol/address/${w.address}" target="_blank" style="color:var(--blue)">GMGN ↗</a>
+                &nbsp;·&nbsp;
+                <a href="https://solscan.io/account/${w.address}" target="_blank" style="color:var(--blue)">Solscan ↗</a>
+                &nbsp;·&nbsp;
+                <a href="https://birdeye.so/profile/${w.address}?chain=solana" target="_blank" style="color:var(--blue)">Birdeye ↗</a>
+              </span></div>
+              <div class="detail-item"><label>Source</label><span style="color:var(--muted)">${w.source || 'db'}</span></div>
+            </div>
+            <div style="margin-top:12px">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Recent Trades (live)</span>
+                <button class="btn" style="padding:2px 8px;font-size:11px" onclick="loadWalletTrades('${w.address}', ${i}, event)">Load ↓</button>
+              </div>
+              <div id="wallet-trades-${i}" style="font-size:12px;color:var(--muted)">Click Load to fetch latest trades from GMGN</div>
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function toggleWalletDetail(i) {
+  const row = document.getElementById(`wallet-detail-${i}`);
+  row.classList.toggle('open');
+}
+
+async function loadWalletTrades(address, idx, event) {
+  event.stopPropagation();
+  const el = document.getElementById(`wallet-trades-${idx}`);
+  el.innerHTML = '<span style="color:var(--muted)">Fetching via GMGN CLI…</span>';
+
+  if (!isRunningViaServer()) {
+    el.innerHTML = '<span style="color:var(--muted)">Run <code>python server.py</code> for live data</span>';
+    return;
+  }
+
+  try {
+    const url = `${getProxyBase()}/api/wallet-stats?address=${address}&period=7d`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const stat = await r.json();
+    if (!stat || typeof stat !== 'object') throw new Error('empty response');
+
+    const pnl      = parseFloat(stat.realized_profit ?? 0);
+    const winRate  = stat.pnl_stat?.winrate ?? null;
+    const tokens   = stat.pnl_stat?.token_num ?? null;
+    const holdSecs = stat.pnl_stat?.avg_holding_period ?? null;
+    const buys     = stat.buy ?? null;
+    const sells    = stat.sell ?? null;
+
+    // PnL distribution breakdown
+    const dist = stat.pnl_stat ? [
+      ['Loss >-50%',     stat.pnl_stat.pnl_lt_nd5_num   ?? 0],
+      ['-50% to 0%',     stat.pnl_stat.pnl_nd5_0x_num   ?? 0],
+      ['0% to 2x',       stat.pnl_stat.pnl_0x_2x_num    ?? 0],
+      ['2x to 5x',       stat.pnl_stat.pnl_2x_5x_num    ?? 0],
+      ['> 5x',           stat.pnl_stat.pnl_gt_5x_num    ?? 0],
+    ] : [];
+
+    const rows = [
+      ['7d Realized PnL',  fmtPnl(pnl)],
+      ['Win Rate',         winRate !== null ? (winRate*100).toFixed(1)+'%' : '—'],
+      ['Tokens Traded',    tokens ?? '—'],
+      ['Avg Hold Time',    holdSecs ? (holdSecs/60).toFixed(0)+'m' : '—'],
+      ['Buys / Sells',     (buys !== null && sells !== null) ? `${buys} / ${sells}` : '—'],
+    ];
+
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <table style="font-size:12px;border-collapse:collapse">
+          ${rows.map(([k,v]) => `
+            <tr>
+              <td style="padding:3px 10px 3px 0;color:var(--muted)">${k}</td>
+              <td style="padding:3px 0;font-weight:700">${v}</td>
+            </tr>`).join('')}
+        </table>
+        ${dist.length ? `
+        <table style="font-size:11px;border-collapse:collapse">
+          <tr><td colspan="2" style="color:var(--muted);padding-bottom:4px;font-size:10px">PnL DISTRIBUTION</td></tr>
+          ${dist.map(([k,v]) => `
+            <tr>
+              <td style="padding:2px 8px 2px 0;color:var(--muted)">${k}</td>
+              <td style="padding:2px 0">${v} trades</td>
+            </tr>`).join('')}
+        </table>` : ''}
+      </div>
+      <div style="margin-top:8px">
+        <a href="https://gmgn.ai/sol/address/${address}" target="_blank" style="color:var(--blue);font-size:11px">View on GMGN ↗</a>
+        &nbsp;·&nbsp;
+        <a href="https://solscan.io/account/${address}" target="_blank" style="color:var(--blue);font-size:11px">Solscan ↗</a>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--red);font-size:11px">Error: ${e.message}</span>
+      &nbsp;<a href="https://gmgn.ai/sol/address/${address}" target="_blank" style="color:var(--blue);font-size:11px">Open on GMGN ↗</a>`;
+  }
+}
+
+// ============================================================
+// ACTIVITY RENDERING
+// ============================================================
+function renderActivity() {
+  renderFeed();
+  renderPerfList();
+  renderDistChart();
+}
+
+function renderFeed() {
+  const icons = { buy: '📈', sell: '💰', rug: '🚨' };
+  const list = document.getElementById('feed-list');
+
+  if (!FEED_ITEMS.length) {
+    // Fall back to showing top wallets from WALLETS array
+    const items = [...WALLETS].sort((a,b)=>(b.total_pnl||0)-(a.total_pnl||0)).slice(0,15);
+    list.innerHTML = items.map(w => {
+      const pnl = w.total_pnl || 0;
+      const type = pnl >= 0 ? 'buy' : 'rug';
+      return `
+        <div class="feed-item ${type}">
+          <div class="feed-icon">${icons[type]}</div>
+          <div class="feed-body">
+            <div class="feed-main">
+              ${labelBadgeSmall(w.label)} <span style="color:var(--text2)">${w.address.slice(0,10)}…</span>
+              <span class="${pnl>=0?'pos':'neg'}" style="margin-left:6px">${fmtPnl(pnl)}</span>
+            </div>
+            <div class="feed-sub">Score ${w.score} · Hold ${w.avg_hold_hrs ? w.avg_hold_hrs.toFixed(1)+'h' : '—'} · ${w.last_seen ? timeAgo(new Date(w.last_seen).getTime()) : '—'}</div>
+          </div>
+          <span class="copy-btn" onclick="copyText('${w.address}',event)" title="Copy address">📋</span>
+        </div>`;
+    }).join('') || '<div class="empty"><div class="empty-icon">📭</div>No wallet data yet — run the pipeline</div>';
+    return;
+  }
+
+  list.innerHTML = FEED_ITEMS.slice(0,20).map(f => {
+    const shortToken = f.token.length > 12 ? f.token.slice(0,8)+'…' : f.token;
+    const holdStr = f.hold_minutes >= 60 ? (f.hold_minutes/60).toFixed(1)+'h' : Math.round(f.hold_minutes)+'m';
+    return `
+      <div class="feed-item ${f.type}">
+        <div class="feed-icon">${icons[f.type]||'⚡'}</div>
+        <div class="feed-body">
+          <div class="feed-main">
+            ${labelBadgeSmall(f.label)} <span style="color:var(--text2)">${shortToken}</span>
+            <span class="${f.amount>=0?'pos':'neg'}" style="margin-left:6px">${fmtPnl(f.amount*(f.type==='rug'?-1:1))}</span>
+          </div>
+          <div class="feed-sub">${f.wallet.slice(0,10)}… · Hold ${holdStr} · ${timeAgo(f.timestamp)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function labelBadgeSmall(label) {
+  const map = {
+    Diamond_Profitable: '<span style="color:var(--green)">💎</span>',
+    Long_Hold_Green:    '<span style="color:var(--blue)">🟢</span>',
+    Short_Flipper:      '<span style="color:var(--yellow)">🟡</span>',
+    Rug_Chaser:         '<span style="color:var(--red)">🔴</span>',
+  };
+  return map[label] || '';
+}
+
+function renderPerfList() {
+  const top5 = [...WALLETS].sort((a,b)=>(b.total_pnl||0)-(a.total_pnl||0)).slice(0,5);
+  const medals = ['🥇','🥈','🥉','4','5'];
+  document.getElementById('perf-list').innerHTML = top5.map((w,i) => `
+    <div class="perf-item">
+      <div class="perf-rank">${medals[i]}</div>
+      <div class="perf-body">
+        <div class="perf-addr">${w.address.slice(0,10)}…${w.address.slice(-4)}</div>
+        <div class="perf-label">${labelBadge(w.label)}</div>
+      </div>
+      <div class="perf-pnl">${fmtPnl(w.total_pnl||0)}</div>
+    </div>
+  `).join('');
+}
+
+let distChartObj = null;
+function renderDistChart() {
+  const canvas = document.getElementById('dist-chart');
+  const counts = {Diamond_Profitable:0,Long_Hold_Green:0,Short_Flipper:0,Rug_Chaser:0};
+  WALLETS.forEach(w=>{ if(counts[w.label]!==undefined) counts[w.label]++; });
+
+  if(distChartObj) { distChartObj.data.datasets[0].data = Object.values(counts); distChartObj.update(); return; }
+
+  const ctx = canvas.getContext('2d');
+  distChartObj = {
+    data: { labels: Object.keys(counts), datasets: [{ data: Object.values(counts) }] },
+    update() { this._draw(); },
+    _draw() {
+      const w = canvas.parentElement.offsetWidth, h = 160;
+      canvas.width = w; canvas.height = h;
+      const d = this.data.datasets[0].data;
+      const labels = this.data.labels;
+      const colors = ['#00f5a0','#00c8ff','#ffcc00','#ff3b5c'];
+      const max = Math.max(...d, 1);
+      const bw = (w - 60) / d.length - 12;
+      ctx.clearRect(0,0,w,h);
+      d.forEach((v,i) => {
+        const x = 30 + i * ((w-60)/d.length);
+        const bh = (v/max) * (h - 40);
+        const y = h - 30 - bh;
+        const grad = ctx.createLinearGradient(0,y,0,h-30);
+        grad.addColorStop(0, colors[i]+'cc');
+        grad.addColorStop(1, colors[i]+'22');
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.roundRect(x, y, bw, bh, 4); ctx.fill();
+        ctx.fillStyle = colors[i];
+        ctx.font = '700 11px Syne, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(v, x + bw/2, y - 5);
+        ctx.fillStyle = '#4a6375';
+        ctx.font = '9px Space Mono, monospace';
+        const shortLabel = labels[i].replace('_',' ').replace('Profitable','').replace('Green','').replace('Hold','Hold').replace('Chaser','Chaser');
+        ctx.fillText(shortLabel.slice(0,8), x + bw/2, h - 10);
+      });
+    }
+  };
+  distChartObj._draw();
+}
+
+// ============================================================
+// SETUP TAB
+// ============================================================
+function updateSlider(el, valId, prefix='', suffix='', pctSuffix='', mult=1) {
+  const v = parseFloat(el.value) * mult;
+  let display = prefix + (v >= 1000 ? v.toLocaleString() : v) + suffix;
+  if(pctSuffix) display = Math.round(v) + pctSuffix;
+  document.getElementById(valId).textContent = display;
+}
+
+function saveConfig() {
+  const gmgn   = document.getElementById('cfg-gmgn').value.trim();
+  const helius = document.getElementById('cfg-helius').value.trim();
+  const apify  = document.getElementById('cfg-apify').value.trim();
+  const lines = [
+    gmgn   ? `GMGN_API_KEY=${gmgn}`     : null,
+    helius ? `HELIUS_API_KEY=${helius}` : null,
+    apify  ? `APIFY_TOKEN=${apify}`     : null,
+  ].filter(Boolean).join('\n');
+  if (!lines) { alert('Fill in at least one key before saving.'); return; }
+  navigator.clipboard.writeText(lines).then(() => {
+    alert('Copied to clipboard!\n\nPaste into your .env file:\n\n' + lines + '\n\nThen restart server.py and re-run main.py.');
+  }).catch(() => {
+    alert('Add these to your .env file:\n\n' + lines);
+  });
+}
+
+function copyText(text, evt) {
+  if(evt) evt.stopPropagation();
+  navigator.clipboard.writeText(text).then(() => {
+    const el = evt?.currentTarget;
+    if(el) { const orig=el.textContent; el.textContent='✅'; setTimeout(()=>el.textContent=orig,1200); }
+  });
+}
+
+function copyScript() {
+  const text = document.getElementById('script-display').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-all-btn');
+    btn.textContent = '✅ Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 2000);
+  });
+}
+
+function loadScriptDisplay() {
+  document.getElementById('script-display').textContent = `import sqlite3, json, sys, os
+from datetime import datetime
+
+DB_PATH = os.getenv("DB_PATH", "smart_money.db")
+THRESHOLDS = {
+    "min_pnl_diamond": 10_000,
+    "min_pnl_long_hold": 2_000,
+    "min_hold_hrs": 12,
+    "rug_max_mins": 30,
+    "win_rate_bonus_threshold": 0.55,
+    "quick_flip_penalty_threshold": 5,
+}
+
+def score_wallet(wallet, history):
+    score = 0
+    pnl = wallet.get("total_pnl_usd", 0) or 0
+    hold_hrs = (wallet.get("avg_hold_minutes", 0) or 0) / 60
+    wins = sum(1 for h in history if (h.get("pnl") or 0) > 0)
+    win_rate = wins / len(history) if history else 0
+    quick_flips = wallet.get("quick_flip_count", 0) or 0
+
+    if pnl > 50_000: score += 30
+    elif pnl > THRESHOLDS["min_pnl_diamond"]: score += 15
+    elif pnl > THRESHOLDS["min_pnl_long_hold"]: score += 7
+    elif pnl < 0: score -= 10
+
+    rug_hrs = THRESHOLDS["rug_max_mins"] / 60
+    if hold_hrs > 48: score += 25
+    elif hold_hrs > THRESHOLDS["min_hold_hrs"]: score += 12
+    elif hold_hrs > 3: score += 5
+    elif 0 < hold_hrs < rug_hrs: score -= 25
+
+    if win_rate >= THRESHOLDS["win_rate_bonus_threshold"]:
+        score += int(win_rate * 30)
+    elif win_rate < 0.25 and len(history) > 3:
+        score -= 10
+
+    score += min(len(history) * 2, 15)
+    if quick_flips > THRESHOLDS["quick_flip_penalty_threshold"]:
+        score -= 20
+
+    if score >= 70: label = "Diamond_Profitable"
+    elif score >= 45: label = "Long_Hold_Green"
+    elif score >= 10: label = "Short_Flipper"
+    else: label = "Rug_Chaser"
+    return score, label`;
+}
+
+// ============================================================
+// RESIZE HANDLER
+// ============================================================
+window.addEventListener('resize', () => {
+  if(distChartObj) distChartObj._draw();
+});
+
+// ============================================================
+// BOOT
+// ============================================================
+init();
+</script>
+</body>
+</html>

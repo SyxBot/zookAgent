@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__solana-mcp-server__Solana_Documentation_Search",
+      "mcp__gmgn-tutorial__searchDocumentation",
+      "mcp__gmgn-tutorial__getPage"
+    ]
+  }
+}
