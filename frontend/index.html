@@ -3,77 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>zookAgent — Solana Token Filter</title>
+  <title>zookAgent — Streaming Alpha Engine</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header>
-    <h1>zookAgent</h1>
-    <span id="status-dot" class="dot disconnected" title="Stream status"></span>
-    <span id="token-count">0 tokens</span>
+    <div class="header-left">
+      <span class="logo">zookAgent</span>
+      <span class="version">v2</span>
+      <span id="status-dot" class="dot disconnected" title="Stream status"></span>
+      <span id="status-text" class="status-text">Disconnected</span>
+    </div>
+    <div class="header-stats" id="header-stats">
+      <span class="hstat"><span class="hval" id="hs-total">0</span><span class="hlabel">events</span></span>
+      <span class="hstat"><span class="hval" id="hs-reject">0%</span><span class="hlabel">rejected</span></span>
+      <span class="hstat"><span class="hval" id="hs-scored">0</span><span class="hlabel">scored</span></span>
+      <span class="hstat"><span class="hval" id="hs-emitted">0</span><span class="hlabel">signals</span></span>
+      <span class="hstat"><span class="hval" id="hs-tokens">0</span><span class="hlabel">tokens</span></span>
+      <span class="hstat"><span class="hval" id="hs-wallets">0</span><span class="hlabel">wallets</span></span>
+    </div>
+    <div class="header-right">
+      <label class="threshold-label">
+        Min score
+        <input type="range" id="score-threshold" min="0" max="100" value="60" step="1" />
+        <span id="threshold-val">60</span>
+      </label>
+      <button id="clear-btn" class="secondary">Clear</button>
+    </div>
   </header>
 
   <main>
-    <aside id="filter-panel">
-      <h2>Filters</h2>
-
-      <label>Min Liquidity ($)
-        <input type="number" id="f-liquidity" value="0" min="0" step="1000" />
-      </label>
-
-      <label>Min Real Volume 24h ($)
-        <input type="number" id="f-volume" value="0" min="0" step="1000" />
-      </label>
-
-      <label>Min Market Cap ($)
-        <input type="number" id="f-mc-min" value="0" min="0" step="10000" />
-      </label>
-
-      <label>Max Market Cap ($)
-        <input type="number" id="f-mc-max" value="" min="0" step="10000" placeholder="∞" />
-      </label>
-
-      <label>Max Age (hours)
-        <input type="number" id="f-age" value="720" min="0" step="1" />
-      </label>
-
-      <label>Min Holders
-        <input type="number" id="f-holders" value="0" min="0" step="10" />
-      </label>
-
-      <label>Max Top-10 Concentration (%)
-        <input type="number" id="f-top10" value="100" min="0" max="100" step="1" />
-      </label>
-
-      <label>Min Buy/Sell Ratio
-        <input type="number" id="f-bsr" value="0" min="0" step="0.1" />
-      </label>
-
-      <label>Max Buy Tax (%)
-        <input type="number" id="f-buy-tax" value="10" min="0" max="100" step="1" />
-      </label>
-
-      <label>Max Sell Tax (%)
-        <input type="number" id="f-sell-tax" value="10" min="0" max="100" step="1" />
-      </label>
-
-      <label>Min Smart Buys (24h)
-        <input type="number" id="f-sm-buy" value="0" min="0" step="1" />
-      </label>
-
-      <div class="toggle-row">
-        <label><input type="checkbox" id="f-renounced" /> Renounced only</label>
-        <label><input type="checkbox" id="f-lp-burned" /> LP Burned only</label>
-        <label><input type="checkbox" id="f-no-honeypot" checked /> Exclude honeypots</label>
-      </div>
-
-      <button id="apply-btn">Apply Filters</button>
-      <button id="reset-btn" class="secondary">Reset</button>
-    </aside>
-
     <section id="feed">
-      <div id="token-grid"></div>
-      <p id="empty-msg" class="hidden">No tokens match the current filters.</p>
+      <div id="signal-grid"></div>
+      <p id="empty-msg">Waiting for scored signals…</p>
     </section>
   </main>
 
